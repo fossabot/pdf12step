@@ -49,14 +49,14 @@ class Client(object):
 
     :param str url: Base URL of the WP site to gather data from
     """
-    sections = ('meetings', 'locations', 'groups', 'regions')
+    sections = ('meetings',)  # 'locations', 'groups', 'regions')
 
     def __init__(self, url=None):
         if not url:
             raise ValueError('Site URL required')
-        url = url.rstrip('/')
-        self.base = f'{url}/wordpress/wp-admin/'
-        self.nonce_url = f'{url}/meetings/'
+        self.url = url.rstrip('/')
+        self.base = f'{self.url}/wordpress/wp-admin/'
+        self.nonce_url = f'{self.url}/meetings/'
 
     @cached_property
     def nonce(self):
@@ -73,11 +73,16 @@ class Client(object):
 
     def _dispatch(self, method, url, *args, **kwargs):
         logger.debug(f'{method.upper()} {self.base}{url} {args}')
-        response = getattr(requests, method)(f'{self.base}{url}', *args, **kwargs)
+        print(f'{self.base}{url}')
+        method = getattr(requests, method)
+        response = method(f'{self.base}{url}', *args, **kwargs)
         if response.status_code == 404:
             # sometimes the wp-admin is at the root
             self.base = self.base.replace('/wordpress', '')
-            return self._dispatch(method, url, *args, **kwargs)
+            response = method(f'{self.base}{url}', *args, **kwargs)
+        if response.status_code == 404:
+            # sometimes the api is installed w/ proper endpoint
+            response = method(f'{self.url}/meeting-guide/api/', *args, **kwargs)
         response.raise_for_status()
         logger.debug(f'GOT {len(response.content)}B {response.headers["Content-Type"].split(";")[0]} in {response.elapsed}')
         return response.json()
@@ -106,10 +111,10 @@ class Client(object):
         :param dict params: Query parameters to use in GET request
         :rtype: list
         """
-        data = DEFAULTS.copy()
-        data.update(params)
-        data.update(nonce=self.nonce, action='meetings')
-        return self.post('admin-ajax.php', data)
+        # data = DEFAULTS.copy()
+        # data.update(params)
+        # data.update(nonce=self.nonce, action='meetings')
+        return self.get('meeting-guide/api/')
 
     def locations(self):
         """
